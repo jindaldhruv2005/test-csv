@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hello World</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b0c10;
+      --fg: #e8e8e8;
+      --muted: #9aa3ad;
+      --accent: #3b82f6;
+      --card: rgba(255,255,255,0.06);
+      --border: rgba(127,127,127,0.25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+      line-height: 1.4;
+      padding: 24px;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow: hidden;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      background: var(--accent);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: transparent;
+      overflow: hidden;
+    }
+    thead th {
+      text-align: left;
+      background: rgba(59,130,246,0.12);
+      color: inherit;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(6px);
+    }
+    tbody td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+    tbody tr:hover td {
+      background: rgba(255,255,255,0.04);
+    }
+    .small {
+      font-size: 0.9rem;
+    }
+    @media (max-width: 640px) {
+      body { padding: 16px; }
+      .row { gap: 12px; }
+      a.button { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hello World</h1>
+
+    <section class="card" aria-labelledby="csv-title">
+      <div class="row">
+        <h2 id="csv-title" style="margin:0;">sample.csv</h2>
+        <a class="button" href="sample.csv" download>Download CSV</a>
+      </div>
+      <p id="status" class="status">Loading sample.csv...</p>
+      <div id="table-container" role="region" aria-live="polite" aria-busy="true"></div>
+      <p class="small status" id="hint" style="margin-top:10px; display:none;">
+        Tip: If you’re opening this file directly from your filesystem and your browser blocks loading local files,
+        serve the folder with a local web server (see README.md), or rely on the bundled preview shown here.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    // A bundled preview of sample.csv to ensure the table is visible even if fetch is blocked (e.g., file:// origin).
+    const bundledPreviewCSV = `id,product,sales
+1,Product A,259.69
+2,Product B,256.16`;
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [];
+      let field = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') {
+              field += '"';
+              i++;
+            } else {
+              inQuotes = false;
+            }
+          } else {
+            field += ch;
+          }
+        } else {
+          if (ch === '"') {
+            inQuotes = true;
+          } else if (ch === ',') {
+            row.push(field);
+            field = '';
+          } else if (ch === '\n') {
+            row.push(field);
+            rows.push(row);
+            row = [];
+            field = '';
+          } else if (ch === '\r') {
+            // ignore CR
+          } else {
+            field += ch;
+          }
+        }
+      }
+      if (field.length > 0 || row.length > 0) {
+        row.push(field);
+        rows.push(row);
+      }
+
+      // filter out completely empty rows
+      return rows.filter(r => r.some(c => (c ?? '').trim() !== ''));
+    }
+
+    function renderTable(rows) {
+      const container = document.getElementById('table-container');
+      container.innerHTML = '';
+
+      if (!rows || rows.length === 0) {
+        container.textContent = 'No data found in CSV.';
+        return;
+      }
+
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+
+      const header = rows[0];
+      const trh = document.createElement('tr');
+      header.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+
+      for (let i = 1; i < rows.length; i++) {
+        const tr = document.createElement('tr');
+        rows[i].forEach(cell => {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      }
+
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    async function loadCSV() {
+      const status = document.getElementById('status');
+      const hint = document.getElementById('hint');
+      const container = document.getElementById('table-container');
+
+      try {
+        const res = await fetch('sample.csv', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        renderTable(parseCSV(text));
+        status.textContent = 'Loaded sample.csv';
+        container.setAttribute('aria-busy', 'false');
+      } catch (err) {
+        // Fallback to the bundled preview
+        renderTable(parseCSV(bundledPreviewCSV));
+        status.textContent = 'Showing bundled preview (could not fetch sample.csv).';
+        hint.style.display = 'block';
+        container.setAttribute('aria-busy', 'false');
+        console.warn('Could not fetch sample.csv:', err);
+      }
+    }
+
+    loadCSV();
+  </script>
+</body>
+</html>
